@@ -1,106 +1,77 @@
-# PawSwap
+# PawSwap — Campus Resource Resale Platform
 
-**Campus Resource Resale Platform**
+We are building a Northeastern University–exclusive marketplace that turns campus move-in and move-out logistics into a trusted peer-to-peer resale experience. Users sign up with their Northeastern email and NUID. Sellers upload items (dorm furniture, bedding, NEU merch, textbooks, IT gear, etc.) with photos, descriptions, and tags. The system supports location-aware listings (building-level filters from campus map), 15+ filters, and an AI feature that detects uploaded objects and auto-generates descriptions, tags, and suggested pricing. Buyers browse by category, search by tags, and message sellers to negotiate. Bundles let sellers create packages (e.g., Freshman Dorm Essential: fridge, microwave, storage). Payments flow through escrow and PayPal.
 
-A Northeastern University–exclusive marketplace for reselling school and dorm supplies. Simplify move-in and move-out logistics with location-aware listings, secure authentication, and peer-to-peer exchanges.
+**Features:** Northeastern email + NUID authentication; location-based listings; category pages (Dorm, Clothing, Textbook, IT, Miscellaneous); AI item detection and listing assist; bundle creation; messaging; escrow/PayPal payments; image hover descriptions; 3–4 column grid with sidebar filters.
 
----
-
-## 👥 Team
-
-| Name | Role | Email |
-|------|------|-------|
-| **Vanessa Wang** | Backend — Security & Auth | wang.van@northeastern.edu |
-| **Nicole Stekol** | Backend — Search & Navigation | stekol.n@northeastern.edu |
-| **Samantha Loomis** | Frontend — User & Product Pages | luloomis.x@northeastern.edu |
-| **Rahul Mavadia** | Frontend — Layout & Navigation | mavadia.r@northeastern.edu |
+**Vibe:** "Facebook Marketplace for NEU" — campus-focused, trusted, sustainable, peer-to-peer.
 
 ---
 
-## 🎯 Project Overview
+## How the project ties together
 
-PawSwap is a Python and HTML-based campus-exclusive marketplace with **15+ filters** for reselling school and dorm supplies. It supports location-based listings and secure identity authentication for trusted peer-to-peer exchanges.
+- **Frontend** — Built in **`my-app/`**. React (Vite), port **5173**. Routes: `/`, `/login`, `/signup`, `/app` (main marketplace), `/app/user/:id` (individual user page), `/app/product/:id`, `/app/upload`, `/app/messages`, `/app/bundles`. Calls the backend API. Backend CORS must allow `http://localhost:5173`.
+- **Backend API** — **FastAPI** (Python), port **8000**. One FastAPI app serving all REST endpoints (auth, users, products, search, messages, bundles, payments).
+- **Database** — **PostgreSQL** (or SQLite for dev). Access via **Python** using SQLAlchemy or similar. Flow: FastAPI → Python DB layer → Database.
 
-### Key Features
+**Explicit stack:**
 
-- **Location-aware listings** — Building-level filters from campus map
-- **Secure identity authentication** — NUID checks and Northeastern email verification
-- **Category-based organization** — Dorm (Furniture, Bedding), Clothing (NEU merch, Puffer), Textbook, IT, Miscellaneous
-- **AI-powered listings** — Upload an object; AI detects the item and suggests description, tags, and pricing
-- **Bundle feature** — Sellers can create packages (e.g., Freshman Dorm Essential Package: fridge, microwave, storage containers)
-- **Messaging system** — Buyers and sellers can chat and negotiate
-- **Payment system** — Escrow and PayPal integration
-- **Image hover descriptions** — Hover over product images to view descriptions
-- **Responsive grid layout** — 3–4 columns with sidebar filters (clothes, books, etc.)
-
----
-
-## 🌟 Benefits
-
-- **For NEU students** — Easier move-in and move-out
-- **Sustainability** — Recycle and reduce waste
-- **Convenience** — Easier transportation of large items
-- **Community** — Supports NUIN and other programs with frequent move cycles
+| Piece | Technology |
+|-------|------------|
+| Frontend | React, Vite, port 5173 (in `my-app/`) |
+| Backend API | **FastAPI** (Python), port 8000 |
+| Database | **PostgreSQL** (SQLite for local dev) |
+| DB access | **Python**, SQLAlchemy or async equivalent |
+| Auth | JWT, bcrypt, NUID + Northeastern email verification |
+| AI (listing assist) | Vision API for item detection, LLM for description/tags/pricing |
+| Payments | Escrow, PayPal integration |
 
 ---
 
-## 📄 Website Pages
+## Working without blocking each other
 
-| Page | Description |
-|------|-------------|
-| **Log In** | Northeastern email + password authentication |
-| **Individual User Page** | User’s selling products and purchase history |
-| **Upload Product** | Picture, descriptions, tags, college, product category |
-| **Messages** | View past conversations with buyers/sellers |
-| **Main Selling Page** | Search by tags, category sidebar, grid layout |
+All **data shapes, API contracts, database schema, and page requirements** are in **`PROJECT_DESC.md`**. Use it as the single source of truth. Each role can build against those contracts and stub what others provide until they're ready.
 
 ---
 
-## 🛠️ Tech Stack
+## Roles at a glance
 
-- **Frontend:** React, HTML, CSS
-- **Backend:** Python
-- **Build:** Vite
-
----
-
-## 📂 Team Roles & Responsibilities
-
-### Frontend
-
-| Developer | Responsibilities |
-|-----------|------------------|
-| **Rahul Mavadia** | General layout, tabs, navigation structure |
-| **Samantha Loomis** | Individual user page, product page components |
-
-### Backend
-
-| Developer | Responsibilities |
-|-----------|------------------|
-| **Vanessa Wang** | Security, login, password reset, user creation |
-| **Nicole Stekol** | Search engine, tab switching logic |
+| Role | Owns | Full details |
+|------|------|--------------|
+| **Vanessa Wang — Security & Auth** | Login, signup, password reset, user creation, NUID/email verification, JWT, route protection | PROJECT_DESC.md |
+| **Nicole Stekol — Search & Navigation** | Search engine, filters (15+), tab/category switching, query logic | PROJECT_DESC.md |
+| **Samantha Loomis — User & Product Pages** | Individual user page, product detail page, purchase history, product cards | PROJECT_DESC.md |
+| **Rahul Mavadia — Layout & Navigation** | General layout, tabs, sidebar, main directory, responsive grid (3–4 columns) | PROJECT_DESC.md |
 
 ---
 
-## 🚀 Getting Started
+## Full brief (single source of truth)
+
+**Everything is in `PROJECT_DESC.md`:**
+
+- Project overview, tech stack, data flow
+- **How the project ties together** (Frontend → FastAPI → DB)
+- **Working without blocking** (contracts in one doc; stub others)
+- **API design** (all endpoints)
+- **Data contracts** (request/response shapes for auth, products, search, messages, bundles)
+- **Database schema** — tables (users, products, messages, bundles, transactions), column types
+- **Frontend** — routes and data each page expects (so backend can match)
+- **Roles and responsibilities** — each role: Owns, Needs from others, Delivers to others
+- Environment variables, timeline, key metrics
+
+Read **`PROJECT_DESC.md`** first before making changes.
+
+---
+
+## Getting Started
 
 ```bash
+# Frontend
 cd my-app
 npm install
 npm run dev
+# → http://localhost:5173
+
+# Backend (when ready)
+# uvicorn main:app --reload --port 8000
 ```
-
----
-
-## 📈 Future Scope
-
-- Expand to other Northeastern campuses
-- Scale to other colleges
-- Partner with off-campus housing to promote supply purchases for NEU students
-
----
-
-## 📝 Notes
-
-- Name change possibility under consideration
-- Partnership opportunities with off-campus housing providers
