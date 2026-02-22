@@ -72,6 +72,9 @@ npm install
 npm run dev
 # → http://localhost:5173
 
-# Backend (when ready)
-# uvicorn main:app --reload --port 8000
+# Backend
+cd backend-auth
+pip install -r ../requirements.txt  # or: ../venv/bin/pip install -r ../requirements.txt
+uvicorn main:app --reload --port 8000
+# → http://localhost:8000 (API docs at /docs)
 ```
