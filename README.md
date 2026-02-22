@@ -2,7 +2,7 @@
 
 We are building a Northeastern University–exclusive marketplace that turns campus move-in and move-out logistics into a trusted peer-to-peer resale experience. Users sign up with their Northeastern email and NUID. Sellers upload items (dorm furniture, bedding, NEU merch, textbooks, IT gear, etc.) with photos, descriptions, and tags. The system supports location-aware listings (building-level filters from campus map), 15+ filters, and an AI feature that detects uploaded objects and auto-generates descriptions, tags, and suggested pricing. Buyers browse by category, search by tags, and message sellers to negotiate. Bundles let sellers create packages (e.g., Freshman Dorm Essential: fridge, microwave, storage). Payments flow through escrow and PayPal.
 
-**Features:** Northeastern email + NUID authentication; location-based listings; category pages (Dorm, Clothing, Textbook, IT, Miscellaneous); AI item detection and listing assist; bundle creation; messaging; escrow/PayPal payments; image hover descriptions; 3–4 column grid with sidebar filters.
+**Features:** Northeastern email + NUID authentication; location-based listings; category pages (Dorm, Clothing, Textbook, Miscellaneous); AI item detection and listing assist; bundle creation; messaging; escrow/PayPal payments; image hover descriptions; 3–4 column grid with sidebar filters.
 
 **Vibe:** "Facebook Marketplace for NEU" — campus-focused, trusted, sustainable, peer-to-peer.
 
