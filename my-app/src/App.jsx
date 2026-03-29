@@ -1,28 +1,12 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Auth from "./Auth";
+import { supabase } from "./lib/supabase";
 
 const CATEGORIES = ["Clothing", "Misc", "Textbooks", "Dorm"];
 const CAT_ICONS = { Clothing: "👕", Misc: "🎮", Textbooks: "📚", Dorm: "🛏️" };
 const CONDITIONS = ["Any", "New", "Like New", "Good", "Fair"];
 const DELIVERY_OPTS = ["Any", "Pickup", "Drop Off"];
 const SORT_OPTS = ["Newest", "Price: Low to High", "Price: High to Low", "Name A–Z"];
-
-const SAMPLE = [
-  { id: 1, name: "Calculus Textbook 3rd Ed.", price: 35, category: "Textbooks", delivery: "pickup", condition: "Good", description: "Barely used, no highlights.", img: null, seller: "alex.h", createdAt: 5 },
-  { id: 2, name: "Blue Nike Hoodie XL", price: 22, category: "Clothing", delivery: "dropoff", condition: "Like New", description: "Good condition, worn twice.", img: null, seller: "jordan.k", createdAt: 3 },
-  { id: 3, name: "Mini Fridge", price: 60, category: "Dorm", delivery: "pickup", condition: "Good", description: "Works great, fits a whole shelf.", img: null, seller: "sam.t", createdAt: 8 },
-  { id: 4, name: "CS3500 Notes Bundle", price: 15, category: "Textbooks", delivery: "pickup", condition: "Fair", description: "Full semester OOD notes.", img: null, seller: "priya.m", createdAt: 1 },
-  { id: 5, name: "Desk Lamp", price: 12, category: "Dorm", delivery: "pickup", condition: "Good", description: "LED lamp, barely used.", img: null, seller: "alex.h", createdAt: 2 },
-  { id: 6, name: "Python Programming Book", price: 20, category: "Textbooks", delivery: "dropoff", condition: "Like New", description: "3rd edition, no marks.", img: null, seller: "sam.t", createdAt: 6 },
-  { id: 7, name: "NU Sweatpants M", price: 18, category: "Clothing", delivery: "pickup", condition: "New", description: "Never worn, still tagged.", img: null, seller: "jordan.k", createdAt: 4 },
-  { id: 8, name: "Xbox Controller", price: 40, category: "Misc", delivery: "dropoff", condition: "Good", description: "Works perfectly, slight wear.", img: null, seller: "priya.m", createdAt: 7 },
-];
-
-const SAMPLE_MESSAGES = [
-  { id: 1, from: "alex.h", item: "Calculus Textbook 3rd Ed.", text: "Hey! Is this still available?", time: "2h ago", unread: true },
-  { id: 2, from: "jordan.k", item: "Blue Nike Hoodie XL", text: "Can you do $18?", time: "5h ago", unread: true },
-  { id: 3, from: "priya.m", item: "Mini Fridge", text: "Where can we meet?", time: "1d ago", unread: false },
-];
 
 const SCIFI = {
   bg: "#070b14", surface: "#0d1420", surface2: "#111b2e",
@@ -57,10 +41,22 @@ const DEFAULT_FILTERS = {
   minPrice: "", maxPrice: "", sort: "Newest", sellerOnly: false,
 };
 
+const timeAgo = (iso) => {
+  if (!iso) return "";
+  const sec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (sec < 60) return "now";
+  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
+  return `${Math.floor(sec / 86400)}d ago`;
+};
+
+const threadForUsers = (a, b) => [a, b].sort().join("__");
+
 export default function App() {
   const [user, setUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
   const [page, setPage] = useState("home");
-  const [listings, setListings] = useState(SAMPLE);
+  const [listings, setListings] = useState([]);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
   const [detail, setDetail] = useState(null);
@@ -70,15 +66,201 @@ export default function App() {
   const [msgOpen, setMsgOpen] = useState(false);
   const [msgText, setMsgText] = useState("");
   const [msgSent, setMsgSent] = useState(false);
-  const [favorites, setFavorites] = useState([1]);
-  const [activeChat, setActiveChat] = useState(null);
+  const [favorites, setFavorites] = useState([]);
+  const [activeChatId, setActiveChatId] = useState(null);
   const [chatInput, setChatInput] = useState("");
-  const [chats, setChats] = useState(SAMPLE_MESSAGES);
+  const [chats, setChats] = useState([]);
+  const [threadMessages, setThreadMessages] = useState([]);
+  const [profiles, setProfiles] = useState({});
   const [profileTab, setProfileTab] = useState("listings");
 
-  if (!user) return <Auth onLogin={setUser} />;
-
   const setF = (k) => (v) => setFilters(f => ({ ...f, [k]: v }));
+
+  useEffect(() => {
+    let mounted = true;
+
+    const syncSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      const authUser = data?.session?.user || null;
+      if (mounted) {
+        setUser(
+          authUser
+            ? {
+                id: authUser.id,
+                email: authUser.email,
+                name: authUser.user_metadata?.name || authUser.email?.split("@")[0] || "Husky",
+              }
+            : null
+        );
+        setAuthReady(true);
+      }
+    };
+
+    syncSession();
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      const authUser = session?.user || null;
+      setUser(
+        authUser
+          ? {
+              id: authUser.id,
+              email: authUser.email,
+              name: authUser.user_metadata?.name || authUser.email?.split("@")[0] || "Husky",
+            }
+          : null
+      );
+      setAuthReady(true);
+    });
+
+    return () => {
+      mounted = false;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  const loadListings = async () => {
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    const sellerIds = [...new Set((data || []).map((r) => r.seller_id).filter(Boolean))];
+    let sellerNameMap = { ...profiles };
+    if (sellerIds.length) {
+      const { data: profileRows } = await supabase
+        .from("profiles")
+        .select("id, display_name")
+        .in("id", sellerIds);
+      if (profileRows) {
+        profileRows.forEach((p) => {
+          sellerNameMap[p.id] = p.display_name || p.id?.slice(0, 6);
+        });
+        setProfiles((prev) => {
+          const next = { ...prev };
+          profileRows.forEach((p) => {
+            next[p.id] = p.display_name || p.id?.slice(0, 6);
+          });
+          return next;
+        });
+      }
+    }
+
+    const mapped = (data || []).map((row) => {
+      const normalizedCategory =
+        CATEGORIES.find((c) => c.toLowerCase() === String(row.category || "").toLowerCase()) || "Misc";
+      return {
+      id: row.id,
+      name: row.title || "Untitled item",
+      price: Number(row.price || 0),
+      category: normalizedCategory,
+      delivery: row.delivery || "pickup",
+      condition: row.condition || "Good",
+      description: row.description || "",
+      img: Array.isArray(row.images) && row.images.length ? row.images[0] : null,
+      seller: sellerNameMap[row.seller_id] || row.seller_id?.slice(0, 6) || "seller",
+      sellerId: row.seller_id,
+      createdAt: new Date(row.created_at || Date.now()).getTime(),
+      };
+    });
+    setListings(mapped);
+  };
+
+  const loadChats = async () => {
+    if (!user?.id) return;
+    const { data, error } = await supabase
+      .from("messages")
+      .select("*")
+      .or(`sender_id.eq.${user.id},recipient_id.eq.${user.id}`)
+      .order("created_at", { ascending: false });
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    const byThread = new Map();
+    for (const msg of data || []) {
+      if (!byThread.has(msg.thread_id)) byThread.set(msg.thread_id, msg);
+    }
+
+    const otherIds = [...new Set((data || []).map((m) => (m.sender_id === user.id ? m.recipient_id : m.sender_id)).filter(Boolean))];
+    let nameMap = { ...profiles };
+    if (otherIds.length) {
+      const { data: profileRows } = await supabase
+        .from("profiles")
+        .select("id, display_name")
+        .in("id", otherIds);
+      if (profileRows) {
+        profileRows.forEach((p) => {
+          nameMap[p.id] = p.display_name || p.id?.slice(0, 6);
+        });
+        setProfiles((prev) => {
+          const next = { ...prev };
+          profileRows.forEach((p) => {
+            next[p.id] = p.display_name || p.id?.slice(0, 6);
+          });
+          return next;
+        });
+      }
+    }
+
+    const convos = [...byThread.values()].map((msg) => {
+      const otherId = msg.sender_id === user.id ? msg.recipient_id : msg.sender_id;
+      return {
+        id: msg.thread_id,
+        userId: otherId,
+        from: nameMap[otherId] || otherId?.slice(0, 6) || "Husky",
+        item: "Conversation",
+        text: msg.body,
+        time: timeAgo(msg.created_at),
+        unread: msg.recipient_id === user.id,
+      };
+    });
+    setChats(convos);
+    if (!activeChatId && convos.length) setActiveChatId(convos[0].id);
+  };
+
+  const loadThreadMessages = async (threadId) => {
+    if (!threadId) return setThreadMessages([]);
+    const { data, error } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("thread_id", threadId)
+      .order("created_at", { ascending: true });
+    if (error) {
+      console.error(error);
+      return;
+    }
+    setThreadMessages(data || []);
+  };
+
+  useEffect(() => {
+    if (!user?.id) return;
+    loadListings();
+    loadChats();
+
+    const channel = supabase
+      .channel("pawswap-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "products" }, () => loadListings())
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, () => loadChats())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (activeChatId) loadThreadMessages(activeChatId);
+  }, [activeChatId]);
+
+  if (!authReady) {
+    return <div style={{ color: "#fff", padding: 24 }}>Loading...</div>;
+  }
+  if (!user) return <Auth onLogin={setUser} />;
 
   // ── Filter + search logic ──
   const filtered = useMemo(() => {
@@ -88,7 +270,7 @@ export default function App() {
       l.name.toLowerCase().includes(q) ||
       l.description.toLowerCase().includes(q) ||
       l.category.toLowerCase().includes(q) ||
-      l.seller.toLowerCase().includes(q)
+      (l.seller || "").toLowerCase().includes(q)
     );
     if (filters.category !== "All") res = res.filter(l => l.category === filters.category);
     if (filters.condition !== "Any") res = res.filter(l => l.condition === filters.condition);
@@ -97,7 +279,7 @@ export default function App() {
     );
     if (filters.minPrice !== "") res = res.filter(l => l.price >= Number(filters.minPrice));
     if (filters.maxPrice !== "") res = res.filter(l => l.price <= Number(filters.maxPrice));
-    if (filters.sellerOnly && user) res = res.filter(l => l.seller === user.name);
+    if (filters.sellerOnly && user) res = res.filter(l => l.sellerId === user.id);
     switch (filters.sort) {
       case "Price: Low to High": res.sort((a, b) => a.price - b.price); break;
       case "Price: High to Low": res.sort((a, b) => b.price - a.price); break;
@@ -112,19 +294,36 @@ export default function App() {
     filters.delivery !== "Any", filters.minPrice, filters.maxPrice, filters.sellerOnly
   ].filter(Boolean).length;
 
-  const myListings = listings.filter(l => l.seller === user.name || l.id <= 2);
+  const myListings = listings.filter((l) => l.sellerId === user.id);
   const favListings = listings.filter(l => favorites.includes(l.id));
   const unreadCount = chats.filter(c => c.unread).length;
 
   function toggleFav(id) { setFavorites(f => f.includes(id) ? f.filter(x => x !== id) : [...f, id]); }
 
-  function handleUpload() {
+  async function handleUpload() {
     const e = {};
     if (!form.name.trim()) e.name = "Required";
     if (!form.price || isNaN(form.price)) e.price = "Valid number required";
     setErrors(e);
     if (Object.keys(e).length) return;
-    setListings(prev => [...prev, { ...form, price: Number(form.price), id: Date.now(), seller: user.name, createdAt: Date.now() }]);
+
+    const { error } = await supabase.from("products").insert({
+      seller_id: user.id,
+      title: form.name.trim(),
+      description: form.description.trim(),
+      price: Number(form.price),
+      category: form.category,
+      condition: form.condition,
+      delivery: form.delivery,
+      images: form.img ? [form.img] : [],
+      tags: [],
+    });
+    if (error) {
+      setErrors({ form: error.message });
+      return;
+    }
+
+    await loadListings();
     setForm({ name: "", price: "", description: "", delivery: "pickup", category: "Textbooks", condition: "Good", img: null });
     setSubmitted(true);
     setTimeout(() => { setSubmitted(false); setPage("home"); }, 1400);
@@ -138,20 +337,52 @@ export default function App() {
     reader.readAsDataURL(file);
   }
 
-  function sendMessage() {
-    if (!msgText.trim()) return;
+  async function sendMessage() {
+    if (!msgText.trim() || !detail?.sellerId || detail.sellerId === user.id) return;
+    const threadId = threadForUsers(user.id, detail.sellerId);
+    const { error } = await supabase.from("messages").insert({
+      thread_id: threadId,
+      sender_id: user.id,
+      recipient_id: detail.sellerId,
+      body: msgText.trim(),
+    });
+    if (error) {
+      console.error(error);
+      return;
+    }
+    await loadChats();
     setMsgSent(true);
-    setTimeout(() => { setMsgSent(false); setMsgOpen(false); setMsgText(""); }, 1800);
+    setTimeout(() => {
+      setMsgSent(false);
+      setMsgOpen(false);
+      setMsgText("");
+      setPage("profile");
+      setProfileTab("messages");
+      setActiveChatId(threadId);
+    }, 900);
   }
 
-  function sendChat() {
-    if (!chatInput.trim() || !activeChat) return;
-    setChats(prev => prev.map(c => c.id === activeChat.id ? { ...c, text: chatInput, unread: false } : c));
+  async function sendChat() {
+    if (!chatInput.trim() || !activeChatId || !activeChat?.userId) return;
+    const { error } = await supabase.from("messages").insert({
+      thread_id: activeChatId,
+      sender_id: user.id,
+      recipient_id: activeChat.userId,
+      body: chatInput.trim(),
+    });
+    if (error) {
+      console.error(error);
+      return;
+    }
+    await loadThreadMessages(activeChatId);
+    await loadChats();
     setChatInput("");
   }
 
+  const activeChat = chats.find(c => c.id === activeChatId) || null;
+
   const avatarColors = ["#c0392b", "#2563eb", "#7c3aed", "#059669", "#d97706"];
-  const getColor = (name) => avatarColors[name.charCodeAt(0) % avatarColors.length];
+  const getColor = (name = "U") => avatarColors[name.charCodeAt(0) % avatarColors.length];
 
   const s = {
     root: { fontFamily: "'Inter',sans-serif", minHeight: "100vh", width: "100%", background: SCIFI.bg, color: SCIFI.text },
@@ -189,7 +420,7 @@ export default function App() {
 
     // category tabs
     catTabs: { background: SCIFI.surface2, borderBottom: `1px solid ${SCIFI.border}`, padding: "0 40px", display: "flex", gap: 2, overflowX: "auto" },
-    catTab: (active) => ({ padding: "12px 18px", fontSize: 13, fontWeight: 500, color: active ? SCIFI.white : SCIFI.textMuted, borderBottom: active ? `2px solid ${SCIFI.accent}` : "2px solid transparent", cursor: "pointer", whiteSpace: "nowrap", transition: "all .15s", background: "transparent", border: "none", borderBottom: active ? `2px solid ${SCIFI.accent}` : "2px solid transparent" }),
+    catTab: (active) => ({ padding: "12px 18px", fontSize: 13, fontWeight: 500, color: active ? SCIFI.white : SCIFI.textMuted, cursor: "pointer", whiteSpace: "nowrap", transition: "all .15s", background: "transparent", border: "none", borderBottom: active ? `2px solid ${SCIFI.accent}` : "2px solid transparent" }),
 
     // hero
     hero: { background: SCIFI.surface, borderBottom: `1px solid ${SCIFI.border}`, padding: "24px 40px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 },
@@ -273,8 +504,19 @@ export default function App() {
           ? <button style={s.btnSecondary} onClick={() => setPage("home")}>← Back</button>
           : <button style={{ ...s.btnPrimary }} className="btn-glow" onClick={() => setPage("upload")}>+ List Item</button>
         }
-        <div style={s.avatar} onClick={() => setPage("profile")}>{user.name[0].toUpperCase()}</div>
-        <button style={s.btnSecondary} onClick={() => { setUser(null); localStorage.removeItem("token"); }}>Sign out</button>
+        <div style={s.avatar} onClick={() => setPage("profile")}>{(user.name || "U")[0].toUpperCase()}</div>
+        <button
+          style={s.btnSecondary}
+          onClick={async () => {
+            await supabase.auth.signOut();
+            setUser(null);
+            setListings([]);
+            setChats([]);
+            setThreadMessages([]);
+          }}
+        >
+          Sign out
+        </button>
       </div>
     </nav>
   );
@@ -341,7 +583,7 @@ export default function App() {
       <Nav />
       <div style={s.wrap}>
         <div style={s.profileHeader}>
-          <div style={s.bigAvatar}>{user.name[0].toUpperCase()}</div>
+          <div style={s.bigAvatar}>{(user.name || "U")[0].toUpperCase()}</div>
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 22, fontWeight: 700, color: SCIFI.white, marginBottom: 4 }}>{user.name}</div>
             <div style={{ fontSize: 13, color: SCIFI.textMuted, marginBottom: 12 }}>{user.email}</div>
@@ -368,8 +610,8 @@ export default function App() {
           <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 18 }}>
             <div style={s.msgList}>
               {chats.map(c => (
-                <div key={c.id} className="card-hover" style={{ ...s.msgRow(c.unread), background: activeChat?.id === c.id ? SCIFI.surface2 : SCIFI.surface }}
-                  onClick={() => { setActiveChat(c); setChats(prev => prev.map(x => x.id === c.id ? { ...x, unread: false } : x)); }}>
+                <div key={c.id} className="card-hover" style={{ ...s.msgRow(c.unread), background: activeChatId === c.id ? SCIFI.surface2 : SCIFI.surface }}
+                  onClick={() => setActiveChatId(c.id)}>
                   <div style={s.msgAvatar(getColor(c.from))}>{c.from[0].toUpperCase()}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
@@ -393,8 +635,15 @@ export default function App() {
                   </div>
                 </div>
                 <div style={s.chatMessages}>
-                  <div style={s.chatBubble(false)}>{activeChat.text}</div>
-                  <div style={s.chatBubble(true)}>Hey! Let me check and get back to you.</div>
+                  {threadMessages.length === 0 ? (
+                    <div style={{ color: SCIFI.textMuted, fontSize: 13 }}>No messages yet. Start the conversation.</div>
+                  ) : (
+                    threadMessages.map((m) => (
+                      <div key={m.id} style={s.chatBubble(m.sender_id === user.id)}>
+                        {m.body}
+                      </div>
+                    ))
+                  )}
                 </div>
                 <div style={s.chatInputRow}>
                   <input style={{ ...s.inputStyle, flex: 1, marginBottom: 0 }} placeholder="Type a message..." value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendChat()} />
@@ -453,6 +702,7 @@ export default function App() {
         <div style={s.formCard}>
           <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 22, fontWeight: 700, color: SCIFI.white, marginBottom: 28 }}>New Listing</div>
           {submitted && <div style={s.successBanner}>✅ Posted! Redirecting...</div>}
+          {errors.form && <div style={s.err}>{errors.form}</div>}
           <div style={{ marginBottom: 20 }}>
             <label style={s.label}>Product Image</label>
             <label style={s.imgBox}>
