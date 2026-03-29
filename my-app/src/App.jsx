@@ -1,33 +1,131 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import Auth from "./Auth";
 
 const CATEGORIES = ["Clothing", "Misc", "Textbooks", "Dorm"];
 const CAT_ICONS = { Clothing: "👕", Misc: "🎮", Textbooks: "📚", Dorm: "🛏️" };
+const CONDITIONS = ["Any", "New", "Like New", "Good", "Fair"];
+const DELIVERY_OPTS = ["Any", "Pickup", "Drop Off"];
+const SORT_OPTS = ["Newest", "Price: Low to High", "Price: High to Low", "Name A–Z"];
 
 const SAMPLE = [
-  { id: 1, name: "Calculus Textbook 3rd Ed.", price: "35", category: "Textbooks", delivery: "pickup", description: "Barely used, no highlights.", img: null },
-  { id: 2, name: "Blue Nike Hoodie XL", price: "22", category: "Clothing", delivery: "dropoff", description: "Good condition, worn twice.", img: null },
-  { id: 3, name: "Mini Fridge", price: "60", category: "Dorm", delivery: "pickup", description: "Works great, fits a whole shelf.", img: null },
+  { id: 1, name: "Calculus Textbook 3rd Ed.", price: 35, category: "Textbooks", delivery: "pickup", condition: "Good", description: "Barely used, no highlights.", img: null, seller: "alex.h", createdAt: 5 },
+  { id: 2, name: "Blue Nike Hoodie XL", price: 22, category: "Clothing", delivery: "dropoff", condition: "Like New", description: "Good condition, worn twice.", img: null, seller: "jordan.k", createdAt: 3 },
+  { id: 3, name: "Mini Fridge", price: 60, category: "Dorm", delivery: "pickup", condition: "Good", description: "Works great, fits a whole shelf.", img: null, seller: "sam.t", createdAt: 8 },
+  { id: 4, name: "CS3500 Notes Bundle", price: 15, category: "Textbooks", delivery: "pickup", condition: "Fair", description: "Full semester OOD notes.", img: null, seller: "priya.m", createdAt: 1 },
+  { id: 5, name: "Desk Lamp", price: 12, category: "Dorm", delivery: "pickup", condition: "Good", description: "LED lamp, barely used.", img: null, seller: "alex.h", createdAt: 2 },
+  { id: 6, name: "Python Programming Book", price: 20, category: "Textbooks", delivery: "dropoff", condition: "Like New", description: "3rd edition, no marks.", img: null, seller: "sam.t", createdAt: 6 },
+  { id: 7, name: "NU Sweatpants M", price: 18, category: "Clothing", delivery: "pickup", condition: "New", description: "Never worn, still tagged.", img: null, seller: "jordan.k", createdAt: 4 },
+  { id: 8, name: "Xbox Controller", price: 40, category: "Misc", delivery: "dropoff", condition: "Good", description: "Works perfectly, slight wear.", img: null, seller: "priya.m", createdAt: 7 },
 ];
 
+const SAMPLE_MESSAGES = [
+  { id: 1, from: "alex.h", item: "Calculus Textbook 3rd Ed.", text: "Hey! Is this still available?", time: "2h ago", unread: true },
+  { id: 2, from: "jordan.k", item: "Blue Nike Hoodie XL", text: "Can you do $18?", time: "5h ago", unread: true },
+  { id: 3, from: "priya.m", item: "Mini Fridge", text: "Where can we meet?", time: "1d ago", unread: false },
+];
+
+const SCIFI = {
+  bg: "#070b14", surface: "#0d1420", surface2: "#111b2e",
+  border: "#1e3a5f", borderGlow: "#2563eb",
+  accent: "#c0392b", accentGlow: "#e74c3c", accentSoft: "#2d0a0a",
+  blue: "#2563eb", blueSoft: "#0a1628",
+  text: "#e2e8f0", textMuted: "#64748b", textDim: "#334155",
+  green: "#10b981", yellow: "#f59e0b", white: "#ffffff",
+};
+
+const css = `
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: ${SCIFI.bg}; color: ${SCIFI.text}; font-family: 'Inter', sans-serif; }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: ${SCIFI.surface}; }
+  ::-webkit-scrollbar-thumb { background: ${SCIFI.border}; border-radius: 2px; }
+  .card-hover:hover { border-color: ${SCIFI.borderGlow} !important; transform: translateY(-3px); transition: all .2s; }
+  .btn-glow:hover { box-shadow: 0 0 20px rgba(197,48,48,0.4) !important; }
+  input, textarea, select {
+    background: ${SCIFI.surface2} !important; color: ${SCIFI.text} !important;
+    border: 1px solid ${SCIFI.border} !important; border-radius: 8px !important;
+    padding: 10px 14px !important; font-family: 'Inter', sans-serif !important;
+    outline: none !important; font-size: 14px !important;
+  }
+  input:focus, textarea:focus, select:focus { border-color: ${SCIFI.blue} !important; }
+  option { background: ${SCIFI.surface2}; }
+`;
+
+const DEFAULT_FILTERS = {
+  query: "", category: "All", condition: "Any", delivery: "Any",
+  minPrice: "", maxPrice: "", sort: "Newest", sellerOnly: false,
+};
+
 export default function App() {
+  const [user, setUser] = useState(null);
   const [page, setPage] = useState("home");
   const [listings, setListings] = useState(SAMPLE);
-  const [filterCat, setFilterCat] = useState("All");
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [showFilters, setShowFilters] = useState(false);
   const [detail, setDetail] = useState(null);
-  const [form, setForm] = useState({ name: "", price: "", description: "", delivery: "pickup", category: "Textbooks", img: null });
+  const [form, setForm] = useState({ name: "", price: "", description: "", delivery: "pickup", category: "Textbooks", condition: "Good", img: null });
   const [errors, setErrors] = useState({});
   const [submitted, setSubmitted] = useState(false);
+  const [msgOpen, setMsgOpen] = useState(false);
+  const [msgText, setMsgText] = useState("");
+  const [msgSent, setMsgSent] = useState(false);
+  const [favorites, setFavorites] = useState([1]);
+  const [activeChat, setActiveChat] = useState(null);
+  const [chatInput, setChatInput] = useState("");
+  const [chats, setChats] = useState(SAMPLE_MESSAGES);
+  const [profileTab, setProfileTab] = useState("listings");
 
-  const filtered = filterCat === "All" ? listings : listings.filter(l => l.category === filterCat);
+  if (!user) return <Auth onLogin={setUser} />;
+
+  const setF = (k) => (v) => setFilters(f => ({ ...f, [k]: v }));
+
+  // ── Filter + search logic ──
+  const filtered = useMemo(() => {
+    let res = [...listings];
+    const q = filters.query.trim().toLowerCase();
+    if (q) res = res.filter(l =>
+      l.name.toLowerCase().includes(q) ||
+      l.description.toLowerCase().includes(q) ||
+      l.category.toLowerCase().includes(q) ||
+      l.seller.toLowerCase().includes(q)
+    );
+    if (filters.category !== "All") res = res.filter(l => l.category === filters.category);
+    if (filters.condition !== "Any") res = res.filter(l => l.condition === filters.condition);
+    if (filters.delivery !== "Any") res = res.filter(l =>
+      filters.delivery === "Pickup" ? l.delivery === "pickup" : l.delivery === "dropoff"
+    );
+    if (filters.minPrice !== "") res = res.filter(l => l.price >= Number(filters.minPrice));
+    if (filters.maxPrice !== "") res = res.filter(l => l.price <= Number(filters.maxPrice));
+    if (filters.sellerOnly && user) res = res.filter(l => l.seller === user.name);
+    switch (filters.sort) {
+      case "Price: Low to High": res.sort((a, b) => a.price - b.price); break;
+      case "Price: High to Low": res.sort((a, b) => b.price - a.price); break;
+      case "Name A–Z": res.sort((a, b) => a.name.localeCompare(b.name)); break;
+      default: res.sort((a, b) => b.createdAt - a.createdAt);
+    }
+    return res;
+  }, [listings, filters, user]);
+
+  const activeFilterCount = [
+    filters.query, filters.category !== "All", filters.condition !== "Any",
+    filters.delivery !== "Any", filters.minPrice, filters.maxPrice, filters.sellerOnly
+  ].filter(Boolean).length;
+
+  const myListings = listings.filter(l => l.seller === user.name || l.id <= 2);
+  const favListings = listings.filter(l => favorites.includes(l.id));
+  const unreadCount = chats.filter(c => c.unread).length;
+
+  function toggleFav(id) { setFavorites(f => f.includes(id) ? f.filter(x => x !== id) : [...f, id]); }
 
   function handleUpload() {
     const e = {};
     if (!form.name.trim()) e.name = "Required";
-    if (!form.price.trim() || isNaN(form.price)) e.price = "Enter a valid number";
+    if (!form.price || isNaN(form.price)) e.price = "Valid number required";
     setErrors(e);
     if (Object.keys(e).length) return;
-    setListings(prev => [...prev, { ...form, id: Date.now() }]);
-    setForm({ name: "", price: "", description: "", delivery: "pickup", category: "Textbooks", img: null });
+    setListings(prev => [...prev, { ...form, price: Number(form.price), id: Date.now(), seller: user.name, createdAt: Date.now() }]);
+    setForm({ name: "", price: "", description: "", delivery: "pickup", category: "Textbooks", condition: "Good", img: null });
     setSubmitted(true);
     setTimeout(() => { setSubmitted(false); setPage("home"); }, 1400);
   }
@@ -40,207 +138,469 @@ export default function App() {
     reader.readAsDataURL(file);
   }
 
-  const s = {
-    root: { fontFamily: "'Segoe UI',sans-serif", minHeight: "100vh", background: "#f3f3f3" },
-    nav: { background: "#8B0000", color: "#fff", padding: "0 24px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between" },
-    logo: { fontWeight: 900, fontSize: 22, letterSpacing: 3, cursor: "pointer" },
-    navBtn: { background: "#c0392b", color: "#fff", border: "none", borderRadius: 8, padding: "8px 18px", fontWeight: 700, cursor: "pointer", fontSize: 14 },
-    wrap: { maxWidth: 1080, margin: "0 auto", padding: "28px 18px" },
-    catRow: { display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 24 },
-    catBtn: (active) => ({
-      padding: "7px 18px", borderRadius: 20, border: "2px solid #8B0000",
-      background: active ? "#8B0000" : "#fff", color: active ? "#fff" : "#8B0000",
-      fontWeight: 700, cursor: "pointer", fontSize: 13, transition: "all .15s"
-    }),
-    grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(230px,1fr))", gap: 18 },
-    card: { background: "#fff", borderRadius: 12, overflow: "hidden", boxShadow: "0 2px 10px rgba(0,0,0,.09)", cursor: "pointer", transition: "transform .18s" },
-    cardImg: { background: "#8B0000", height: 140, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 48 },
-    cardBody: { padding: 14 },
-    price: { color: "#8B0000", fontWeight: 800, fontSize: 18, margin: "6px 0" },
-    badge: (color) => ({ display: "inline-block", background: color || "#eee", borderRadius: 10, fontSize: 12, padding: "2px 9px", marginRight: 5, marginTop: 4 }),
+  function sendMessage() {
+    if (!msgText.trim()) return;
+    setMsgSent(true);
+    setTimeout(() => { setMsgSent(false); setMsgOpen(false); setMsgText(""); }, 1800);
+  }
 
-    // form
-    formWrap: { background: "#fff", borderRadius: 14, padding: 32, maxWidth: 680, margin: "0 auto", boxShadow: "0 2px 14px rgba(0,0,0,.1)" },
-    formTitle: { color: "#8B0000", fontWeight: 800, fontSize: 22, marginBottom: 24 },
-    label: { display: "block", fontWeight: 600, marginBottom: 5, fontSize: 14, color: "#333" },
-    input: (err) => ({
-      width: "100%", padding: "10px 12px", borderRadius: 8,
-      border: `2px solid ${err ? "#e74c3c" : "#ddd"}`,
-      fontSize: 14, outline: "none", marginBottom: 4
-    }),
-    textarea: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "2px solid #ddd", fontSize: 14, minHeight: 90, resize: "vertical", outline: "none" },
-    row2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 },
-    select: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "2px solid #ddd", fontSize: 14, background: "#fff" },
-    delivRow: { display: "flex", gap: 12, marginTop: 4 },
-    delivOpt: (active) => ({
-      flex: 1, padding: "12px 0", borderRadius: 10, border: `2px solid ${active ? "#8B0000" : "#ddd"}`,
-      background: active ? "#8B0000" : "#fff", color: active ? "#fff" : "#555",
-      fontWeight: 700, cursor: "pointer", textAlign: "center", fontSize: 14, transition: "all .15s"
-    }),
-    submitBtn: { width: "100%", marginTop: 22, padding: "13px 0", background: "#8B0000", color: "#fff", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 16, cursor: "pointer" },
-    imgBox: { border: "2px dashed #c0392b", borderRadius: 10, height: 130, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "#fdf3f3", marginBottom: 4, overflow: "hidden", position: "relative" },
-    err: { color: "#e74c3c", fontSize: 12, marginBottom: 8 },
-    successBanner: { background: "#27ae60", color: "#fff", borderRadius: 10, padding: "14px 20px", textAlign: "center", fontWeight: 700, fontSize: 16, marginBottom: 20 },
+  function sendChat() {
+    if (!chatInput.trim() || !activeChat) return;
+    setChats(prev => prev.map(c => c.id === activeChat.id ? { ...c, text: chatInput, unread: false } : c));
+    setChatInput("");
+  }
+
+  const avatarColors = ["#c0392b", "#2563eb", "#7c3aed", "#059669", "#d97706"];
+  const getColor = (name) => avatarColors[name.charCodeAt(0) % avatarColors.length];
+
+  const s = {
+    root: { fontFamily: "'Inter',sans-serif", minHeight: "100vh", width: "100%", background: SCIFI.bg, color: SCIFI.text },
+    nav: { background: SCIFI.surface, borderBottom: `1px solid ${SCIFI.border}`, padding: "0 40px", height: 60, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100 },
+    logoWrap: { display: "flex", alignItems: "center", gap: 12, cursor: "pointer" },
+    logoMark: { width: 32, height: 32, background: SCIFI.accent, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 900, color: "#fff" },
+    logoText: { fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 18, color: SCIFI.white, letterSpacing: 2 },
+    logoSub: { fontSize: 9, color: SCIFI.textMuted, letterSpacing: 3, marginTop: -2 },
+    navLinks: { display: "flex", gap: 4 },
+    navLink: (active) => ({ padding: "6px 14px", borderRadius: 6, fontSize: 13, fontWeight: 500, color: active ? SCIFI.white : SCIFI.textMuted, background: active ? SCIFI.surface2 : "transparent", border: active ? `1px solid ${SCIFI.border}` : "1px solid transparent", cursor: "pointer" }),
+    navRight: { display: "flex", alignItems: "center", gap: 10 },
+    avatar: { width: 32, height: 32, borderRadius: "50%", background: `linear-gradient(135deg, ${SCIFI.accent}, #7c3aed)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#fff", cursor: "pointer", border: `2px solid ${SCIFI.border}` },
+    unreadBadge: { background: SCIFI.accent, color: "#fff", borderRadius: "50%", width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, marginLeft: -8, marginTop: -8 },
+    btnPrimary: { background: SCIFI.accent, color: "#fff", border: "none", borderRadius: 8, padding: "8px 18px", fontWeight: 600, cursor: "pointer", fontSize: 13, letterSpacing: 0.5, transition: "all .2s" },
+    btnSecondary: { background: "transparent", color: SCIFI.textMuted, border: `1px solid ${SCIFI.border}`, borderRadius: 8, padding: "7px 14px", fontWeight: 500, cursor: "pointer", fontSize: 13 },
+    btnGhost: (active) => ({ background: active ? SCIFI.accentSoft : "transparent", color: active ? "#f87171" : SCIFI.textMuted, border: `1px solid ${active ? SCIFI.accent : SCIFI.border}`, borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 500, cursor: "pointer", transition: "all .15s" }),
+
+    // search bar area
+    searchBar: { background: SCIFI.surface, borderBottom: `1px solid ${SCIFI.border}`, padding: "16px 40px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" },
+    searchInput: { width: "100%", padding: "10px 16px 10px 40px", borderRadius: 10, border: `1px solid ${SCIFI.border}`, background: SCIFI.surface2, color: SCIFI.text, fontSize: 14, outline: "none", fontFamily: "'Inter',sans-serif" },
+    searchWrap: { position: "relative", flex: "1 1 400px", minWidth: 0 },
+    searchIcon: { position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 14, pointerEvents: "none" },
+    filterBtn: (count) => ({ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", borderRadius: 10, border: `1px solid ${count > 0 ? SCIFI.accent : SCIFI.border}`, background: count > 0 ? SCIFI.accentSoft : "transparent", color: count > 0 ? "#f87171" : SCIFI.textMuted, fontWeight: 500, cursor: "pointer", fontSize: 13, transition: "all .15s" }),
+    filterCount: { background: SCIFI.accent, color: "#fff", borderRadius: "50%", width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700 },
+    sortSelect: { padding: "9px 14px", borderRadius: 10, border: `1px solid ${SCIFI.border}`, background: SCIFI.surface2, color: SCIFI.text, fontSize: 13, outline: "none", cursor: "pointer", fontFamily: "'Inter',sans-serif" },
+
+    // filter panel
+    filterPanel: { background: SCIFI.surface, borderBottom: `1px solid ${SCIFI.border}`, padding: "20px 40px", display: "flex", gap: 20, flexWrap: "wrap", alignItems: "flex-end" },
+    filterGroup: { display: "flex", flexDirection: "column", gap: 6, minWidth: 140 },
+    filterLabel: { fontSize: 10, fontWeight: 600, color: SCIFI.textMuted, letterSpacing: 2, textTransform: "uppercase" },
+    filterSelect: { padding: "8px 12px", borderRadius: 8, border: `1px solid ${SCIFI.border}`, background: SCIFI.surface2, color: SCIFI.text, fontSize: 13, outline: "none", cursor: "pointer", fontFamily: "'Inter',sans-serif" },
+    priceRow: { display: "flex", gap: 8, alignItems: "center" },
+    priceInput: { width: 80, padding: "8px 10px", borderRadius: 8, border: `1px solid ${SCIFI.border}`, background: SCIFI.surface2, color: SCIFI.text, fontSize: 13, outline: "none", fontFamily: "'Inter',sans-serif" },
+    clearBtn: { padding: "8px 16px", borderRadius: 8, border: `1px solid ${SCIFI.border}`, background: "transparent", color: SCIFI.textMuted, fontSize: 12, cursor: "pointer", fontFamily: "'Inter',sans-serif", marginLeft: "auto" },
+
+    // category tabs
+    catTabs: { background: SCIFI.surface2, borderBottom: `1px solid ${SCIFI.border}`, padding: "0 40px", display: "flex", gap: 2, overflowX: "auto" },
+    catTab: (active) => ({ padding: "12px 18px", fontSize: 13, fontWeight: 500, color: active ? SCIFI.white : SCIFI.textMuted, borderBottom: active ? `2px solid ${SCIFI.accent}` : "2px solid transparent", cursor: "pointer", whiteSpace: "nowrap", transition: "all .15s", background: "transparent", border: "none", borderBottom: active ? `2px solid ${SCIFI.accent}` : "2px solid transparent" }),
+
+    // hero
+    hero: { background: SCIFI.surface, borderBottom: `1px solid ${SCIFI.border}`, padding: "24px 40px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 },
+    heroTitle: { fontFamily: "'Space Grotesk',sans-serif", fontSize: 24, fontWeight: 700, color: SCIFI.white, marginBottom: 4 },
+    heroSub: { fontSize: 13, color: SCIFI.textMuted, letterSpacing: 1 },
+    statCard: { background: SCIFI.surface2, border: `1px solid ${SCIFI.border}`, borderRadius: 10, padding: "10px 18px", textAlign: "center" },
+    statNum: { fontFamily: "'Space Grotesk',sans-serif", fontSize: 20, fontWeight: 700, color: SCIFI.accent },
+    statLabel: { fontSize: 10, color: SCIFI.textMuted, letterSpacing: 2, marginTop: 2, textTransform: "uppercase" },
+
+    wrap: { maxWidth: 1300, margin: "0 auto", padding: "24px 32px" },
+    sectionLabel: { fontSize: 10, fontWeight: 600, color: SCIFI.textMuted, letterSpacing: 3, textTransform: "uppercase", marginBottom: 14 },
+    grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(255px, 1fr))", gap: 18 },
+    card: { background: SCIFI.surface, borderRadius: 12, border: `1px solid ${SCIFI.border}`, overflow: "hidden", cursor: "pointer", transition: "all .2s", position: "relative" },
+    cardImg: { height: 170, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 54, position: "relative", background: `linear-gradient(135deg, ${SCIFI.surface2}, ${SCIFI.accentSoft})` },
+    cardBody: { padding: "14px 16px 16px" },
+    cardName: { fontWeight: 600, fontSize: 14, color: SCIFI.white, marginBottom: 6, lineHeight: 1.4 },
+    cardPrice: { color: SCIFI.accent, fontWeight: 700, fontSize: 20, marginBottom: 10, fontFamily: "'Space Grotesk',sans-serif" },
+    badgeRow: { display: "flex", gap: 6, flexWrap: "wrap" },
+    badge: (bg, col) => ({ fontSize: 11, padding: "3px 8px", borderRadius: 4, background: bg, color: col, fontWeight: 500, letterSpacing: 0.3 }),
+    favBtn: (isFav) => ({ position: "absolute", top: 10, right: 10, background: isFav ? SCIFI.accent : "rgba(0,0,0,0.5)", border: `1px solid ${isFav ? SCIFI.accent : SCIFI.border}`, borderRadius: 6, width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 14, color: "#fff", transition: "all .15s" }),
 
     // detail
-    detailBack: { color: "#8B0000", fontWeight: 700, cursor: "pointer", marginBottom: 18, fontSize: 14 },
-    detailCard: { background: "#fff", borderRadius: 14, overflow: "hidden", boxShadow: "0 2px 14px rgba(0,0,0,.1)", maxWidth: 700, margin: "0 auto" },
-    detailImg: { background: "#8B0000", height: 240, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 80 },
-    detailBody: { padding: 28 },
+    detailCard: { background: SCIFI.surface, borderRadius: 16, border: `1px solid ${SCIFI.border}`, maxWidth: 760, margin: "0 auto" },
+    detailImg: { height: 280, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 90, background: `linear-gradient(135deg, ${SCIFI.surface2}, ${SCIFI.accentSoft})`, borderRadius: "16px 16px 0 0" },
+    detailBody: { padding: "28px 32px" },
+
+    // upload
+    formCard: { background: SCIFI.surface, borderRadius: 16, border: `1px solid ${SCIFI.border}`, padding: "36px 40px", maxWidth: 720, margin: "0 auto" },
+    label: { display: "block", fontSize: 11, fontWeight: 600, color: SCIFI.textMuted, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 },
+    inputStyle: { width: "100%", padding: "11px 14px", borderRadius: 8, border: `1px solid ${SCIFI.border}`, fontSize: 14, outline: "none", background: SCIFI.surface2, color: SCIFI.text, marginBottom: 4, boxSizing: "border-box" },
+    row2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 },
+    row3: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 18 },
+    delivRow: { display: "flex", gap: 12, marginTop: 4 },
+    delivOpt: (active) => ({ flex: 1, padding: "12px 0", borderRadius: 8, border: `1px solid ${active ? SCIFI.accent : SCIFI.border}`, background: active ? SCIFI.accentSoft : "transparent", color: active ? "#fff" : SCIFI.textMuted, fontWeight: 600, cursor: "pointer", textAlign: "center", fontSize: 13, transition: "all .15s" }),
+    imgBox: { border: `1px dashed ${SCIFI.border}`, borderRadius: 10, height: 130, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: SCIFI.surface2, marginBottom: 4, overflow: "hidden" },
+    err: { color: "#f87171", fontSize: 12, marginBottom: 8 },
+    successBanner: { background: "#064e3b", border: "1px solid #10b981", color: "#6ee7b7", borderRadius: 8, padding: "12px 16px", textAlign: "center", fontWeight: 600, fontSize: 14, marginBottom: 20 },
+
+    // modal
+    overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(8px)" },
+    modal: { background: SCIFI.surface, borderRadius: 16, padding: "32px 36px", width: "100%", maxWidth: 460, border: `1px solid ${SCIFI.border}` },
+
+    // profile
+    profileHeader: { background: SCIFI.surface, border: `1px solid ${SCIFI.border}`, borderRadius: 16, padding: "28px 32px", marginBottom: 24, display: "flex", alignItems: "center", gap: 24 },
+    bigAvatar: { width: 72, height: 72, borderRadius: "50%", flexShrink: 0, background: `linear-gradient(135deg, ${SCIFI.accent}, #7c3aed)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, fontWeight: 700, color: "#fff", border: `3px solid ${SCIFI.border}` },
+    profileTabs: { display: "flex", gap: 4, marginBottom: 24, background: SCIFI.surface, borderRadius: 10, padding: 4, border: `1px solid ${SCIFI.border}`, width: "fit-content" },
+    profileTab: (active) => ({ padding: "8px 20px", borderRadius: 7, fontSize: 13, fontWeight: 500, background: active ? SCIFI.surface2 : "transparent", color: active ? SCIFI.white : SCIFI.textMuted, border: active ? `1px solid ${SCIFI.border}` : "1px solid transparent", cursor: "pointer", transition: "all .15s" }),
+    msgList: { display: "flex", flexDirection: "column", gap: 10 },
+    msgRow: (unread) => ({ background: SCIFI.surface, border: `1px solid ${unread ? SCIFI.accent : SCIFI.border}`, borderRadius: 12, padding: "14px 18px", cursor: "pointer", display: "flex", alignItems: "center", gap: 14, transition: "all .15s" }),
+    msgAvatar: (color) => ({ width: 40, height: 40, borderRadius: "50%", flexShrink: 0, background: color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: "#fff" }),
+    chatBox: { background: SCIFI.surface, border: `1px solid ${SCIFI.border}`, borderRadius: 16, display: "flex", flexDirection: "column", height: 460 },
+    chatHeader: { padding: "14px 18px", borderBottom: `1px solid ${SCIFI.border}`, display: "flex", alignItems: "center", gap: 12 },
+    chatMessages: { flex: 1, padding: "16px 18px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 10 },
+    chatBubble: (mine) => ({ maxWidth: "70%", padding: "9px 14px", borderRadius: mine ? "12px 12px 2px 12px" : "12px 12px 12px 2px", background: mine ? SCIFI.accent : SCIFI.surface2, color: "#fff", fontSize: 13, alignSelf: mine ? "flex-end" : "flex-start", border: mine ? "none" : `1px solid ${SCIFI.border}` }),
+    chatInputRow: { padding: "12px 16px", borderTop: `1px solid ${SCIFI.border}`, display: "flex", gap: 10 },
   };
 
-  // ── Pages ──────────────────────────────────────────────────────────────────
+  const Nav = ({ back }) => (
+    <nav style={s.nav}>
+      <div style={s.logoWrap} onClick={() => setPage("home")}>
+        <div style={s.logoMark}>PS</div>
+        <div>
+          <div style={s.logoText}>PAWSWAP</div>
+          <div style={s.logoSub}>NORTHEASTERN · BOSTON</div>
+        </div>
+      </div>
+      <div style={s.navLinks}>
+        {!back && <>
+          <button style={s.navLink(page === "home")} onClick={() => setPage("home")}>Marketplace</button>
+          <button style={s.navLink(page === "profile")} onClick={() => setPage("profile")}>My Profile</button>
+        </>}
+      </div>
+      <div style={s.navRight}>
+        {unreadCount > 0 && (
+          <div style={{ position: "relative", cursor: "pointer" }} onClick={() => { setPage("profile"); setProfileTab("messages"); }}>
+            <span style={{ fontSize: 18 }}>💬</span>
+            <div style={s.unreadBadge}>{unreadCount}</div>
+          </div>
+        )}
+        {back
+          ? <button style={s.btnSecondary} onClick={() => setPage("home")}>← Back</button>
+          : <button style={{ ...s.btnPrimary }} className="btn-glow" onClick={() => setPage("upload")}>+ List Item</button>
+        }
+        <div style={s.avatar} onClick={() => setPage("profile")}>{user.name[0].toUpperCase()}</div>
+        <button style={s.btnSecondary} onClick={() => { setUser(null); localStorage.removeItem("token"); }}>Sign out</button>
+      </div>
+    </nav>
+  );
 
+  const MessageModal = () => (
+    <div style={s.overlay} onClick={() => setMsgOpen(false)}>
+      <div style={s.modal} onClick={e => e.stopPropagation()}>
+        {msgSent ? (
+          <div style={{ textAlign: "center", padding: "20px 0" }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: SCIFI.green }}>Message Sent!</div>
+            <div style={{ fontSize: 13, color: SCIFI.textMuted, marginTop: 6 }}>The seller will get back to you soon.</div>
+          </div>
+        ) : (
+          <>
+            <div style={{ fontSize: 16, fontWeight: 700, color: SCIFI.white, marginBottom: 4 }}>Message Seller</div>
+            <div style={{ fontSize: 12, color: SCIFI.textMuted, marginBottom: 20 }}>Re: <span style={{ color: SCIFI.accent }}>{detail?.name}</span></div>
+            <textarea style={{ ...s.inputStyle, minHeight: 110, resize: "vertical", marginBottom: 14 }} placeholder="Hey! Is this still available?" value={msgText} onChange={e => setMsgText(e.target.value)} />
+            <div style={{ display: "flex", gap: 10 }}>
+              <button style={{ ...s.btnPrimary, flex: 1, padding: "11px 0" }} onClick={sendMessage}>Send</button>
+              <button style={{ ...s.btnSecondary, flex: 1, padding: "11px 0" }} onClick={() => setMsgOpen(false)}>Cancel</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+
+  const CardGrid = ({ items }) => (
+    items.length === 0
+      ? <div style={{ textAlign: "center", padding: 80, color: SCIFI.textMuted }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>🔍</div>
+          <div style={{ fontSize: 15, marginBottom: 8 }}>No listings found</div>
+          <div style={{ fontSize: 13 }}>Try adjusting your search or filters</div>
+          {activeFilterCount > 0 && <button style={{ ...s.btnSecondary, marginTop: 16 }} onClick={() => setFilters(DEFAULT_FILTERS)}>Clear all filters</button>}
+        </div>
+      : <div style={s.grid}>
+          {items.map(item => (
+            <div key={item.id} className="card-hover" style={s.card}>
+              <div style={s.cardImg}>
+                {item.img ? <img src={item.img} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span>{CAT_ICONS[item.category]}</span>}
+                <button style={s.favBtn(favorites.includes(item.id))} onClick={e => { e.stopPropagation(); toggleFav(item.id); }}>
+                  {favorites.includes(item.id) ? "♥" : "♡"}
+                </button>
+              </div>
+              <div style={s.cardBody} onClick={() => { setDetail(item); setPage("detail"); }}>
+                <div style={s.cardName}>{item.name}</div>
+                <div style={s.cardPrice}>${item.price}</div>
+                <div style={s.badgeRow}>
+                  <span style={s.badge(SCIFI.accentSoft, "#f87171")}>{item.category}</span>
+                  <span style={s.badge(SCIFI.surface2, SCIFI.textMuted)}>{item.condition}</span>
+                  <span style={s.badge(SCIFI.surface2, SCIFI.textMuted)}>{item.delivery === "pickup" ? "📍 Pickup" : "🚚 Drop Off"}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+  );
+
+  // ── Profile ──
+  if (page === "profile") return (
+    <div style={s.root}>
+      <style>{css}</style>
+      <Nav />
+      <div style={s.wrap}>
+        <div style={s.profileHeader}>
+          <div style={s.bigAvatar}>{user.name[0].toUpperCase()}</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 22, fontWeight: 700, color: SCIFI.white, marginBottom: 4 }}>{user.name}</div>
+            <div style={{ fontSize: 13, color: SCIFI.textMuted, marginBottom: 12 }}>{user.email}</div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <span style={s.badge(SCIFI.accentSoft, SCIFI.accent)}>🏫 Northeastern</span>
+              <span style={s.badge(SCIFI.surface2, SCIFI.textMuted)}>{myListings.length} listings</span>
+              <span style={s.badge(SCIFI.surface2, SCIFI.textMuted)}>{favListings.length} saved</span>
+            </div>
+          </div>
+          <button style={s.btnPrimary} onClick={() => setPage("upload")}>+ New Listing</button>
+        </div>
+        <div style={s.profileTabs}>
+          {[["listings", "My Listings"], ["favorites", "Saved"], ["messages", `Messages${unreadCount > 0 ? ` (${unreadCount})` : ""}`]].map(([k, v]) => (
+            <button key={k} style={s.profileTab(profileTab === k)} onClick={() => setProfileTab(k)}>{v}</button>
+          ))}
+        </div>
+        {profileTab === "listings" && <CardGrid items={myListings} />}
+        {profileTab === "favorites" && (
+          favListings.length === 0
+            ? <div style={{ textAlign: "center", padding: 60, color: SCIFI.textMuted }}>No saved items yet.</div>
+            : <CardGrid items={favListings} />
+        )}
+        {profileTab === "messages" && (
+          <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 18 }}>
+            <div style={s.msgList}>
+              {chats.map(c => (
+                <div key={c.id} className="card-hover" style={{ ...s.msgRow(c.unread), background: activeChat?.id === c.id ? SCIFI.surface2 : SCIFI.surface }}
+                  onClick={() => { setActiveChat(c); setChats(prev => prev.map(x => x.id === c.id ? { ...x, unread: false } : x)); }}>
+                  <div style={s.msgAvatar(getColor(c.from))}>{c.from[0].toUpperCase()}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: SCIFI.white }}>{c.from}</span>
+                      <span style={{ fontSize: 11, color: SCIFI.textMuted }}>{c.time}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: SCIFI.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.item}</div>
+                    <div style={{ fontSize: 12, color: c.unread ? SCIFI.white : SCIFI.textDim, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.text}</div>
+                  </div>
+                  {c.unread && <div style={{ width: 8, height: 8, borderRadius: "50%", background: SCIFI.accent, flexShrink: 0 }} />}
+                </div>
+              ))}
+            </div>
+            <div style={s.chatBox}>
+              {activeChat ? <>
+                <div style={s.chatHeader}>
+                  <div style={s.msgAvatar(getColor(activeChat.from))}>{activeChat.from[0].toUpperCase()}</div>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: SCIFI.white }}>{activeChat.from}</div>
+                    <div style={{ fontSize: 11, color: SCIFI.textMuted }}>Re: {activeChat.item}</div>
+                  </div>
+                </div>
+                <div style={s.chatMessages}>
+                  <div style={s.chatBubble(false)}>{activeChat.text}</div>
+                  <div style={s.chatBubble(true)}>Hey! Let me check and get back to you.</div>
+                </div>
+                <div style={s.chatInputRow}>
+                  <input style={{ ...s.inputStyle, flex: 1, marginBottom: 0 }} placeholder="Type a message..." value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendChat()} />
+                  <button style={s.btnPrimary} onClick={sendChat}>Send</button>
+                </div>
+              </> : <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: SCIFI.textMuted, fontSize: 14 }}>Select a conversation</div>}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // ── Detail ──
   if (page === "detail" && detail) return (
     <div style={s.root}>
-      <nav style={s.nav}>
-        <span style={s.logo} onClick={() => setPage("home")}>🐾 PAWSWAP</span>
-        <button style={s.navBtn} onClick={() => setPage("upload")}>+ List Item</button>
-      </nav>
+      <style>{css}</style>
+      {msgOpen && <MessageModal />}
+      <Nav back />
       <div style={s.wrap}>
-        <div style={s.detailBack} onClick={() => setPage("home")}>← Back to listings</div>
+        <div style={{ color: SCIFI.accent, fontWeight: 600, cursor: "pointer", marginBottom: 20, fontSize: 13 }} onClick={() => setPage("home")}>← Back</div>
         <div style={s.detailCard}>
           <div style={s.detailImg}>
-            {detail.img ? <img src={detail.img} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : CAT_ICONS[detail.category]}
+            {detail.img ? <img src={detail.img} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "16px 16px 0 0" }} /> : <span>{CAT_ICONS[detail.category]}</span>}
           </div>
           <div style={s.detailBody}>
-            <h2 style={{ fontSize: 24, marginBottom: 8 }}>{detail.name}</h2>
-            <div style={s.price}>${detail.price}</div>
-            <div style={{ marginTop: 10 }}>
-              <span style={s.badge("#fdecea")}>{detail.category}</span>
-              <span style={s.badge(detail.delivery === "pickup" ? "#e8f8f5" : "#fef9e7")}>
-                {detail.delivery === "pickup" ? "📍 Pick Up" : "🚚 Drop Off"}
+            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 26, fontWeight: 700, color: SCIFI.white, marginBottom: 8 }}>{detail.name}</div>
+            <div style={{ color: SCIFI.accent, fontWeight: 700, fontSize: 30, marginBottom: 16, fontFamily: "'Space Grotesk',sans-serif" }}>${detail.price}</div>
+            <div style={s.badgeRow}>
+              <span style={s.badge(SCIFI.accentSoft, "#f87171")}>{detail.category}</span>
+              <span style={s.badge(SCIFI.surface2, SCIFI.textMuted)}>{detail.condition}</span>
+              <span style={s.badge(detail.delivery === "pickup" ? "#022c22" : "#2d1a00", detail.delivery === "pickup" ? SCIFI.green : SCIFI.yellow)}>
+                {detail.delivery === "pickup" ? "📍 Pickup" : "🚚 Drop Off"}
               </span>
+              <span style={s.badge(SCIFI.surface2, SCIFI.textMuted)}>👤 {detail.seller}</span>
             </div>
-            {detail.description && <p style={{ marginTop: 16, color: "#555", lineHeight: 1.6 }}>{detail.description}</p>}
-            <button style={{ ...s.submitBtn, marginTop: 24 }}>💬 Message Seller</button>
+            {detail.description && <p style={{ marginTop: 20, color: SCIFI.textMuted, lineHeight: 1.7, fontSize: 14 }}>{detail.description}</p>}
+            <div style={{ display: "flex", gap: 12, marginTop: 24 }}>
+              <button style={{ ...s.btnPrimary, flex: 1, padding: "13px 0", fontSize: 14 }} className="btn-glow" onClick={() => setMsgOpen(true)}>💬 Message Seller</button>
+              <button style={{ ...s.btnSecondary, padding: "13px 20px" }} onClick={() => toggleFav(detail.id)}>
+                {favorites.includes(detail.id) ? "♥ Saved" : "♡ Save"}
+              </button>
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
 
+  // ── Upload ──
   if (page === "upload") return (
     <div style={s.root}>
-      <nav style={s.nav}>
-        <span style={s.logo} onClick={() => setPage("home")}>🐾 PAWSWAP</span>
-        <button style={s.navBtn} onClick={() => setPage("home")}>← Back</button>
-      </nav>
+      <style>{css}</style>
+      <Nav back />
       <div style={s.wrap}>
-        <div style={s.formWrap}>
-          <div style={s.formTitle}>📦 Upload New Product</div>
-          {submitted && <div style={s.successBanner}>✅ Listing posted!</div>}
-
-          {/* Image */}
-          <div style={{ marginBottom: 16 }}>
+        <div style={s.formCard}>
+          <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 22, fontWeight: 700, color: SCIFI.white, marginBottom: 28 }}>New Listing</div>
+          {submitted && <div style={s.successBanner}>✅ Posted! Redirecting...</div>}
+          <div style={{ marginBottom: 20 }}>
             <label style={s.label}>Product Image</label>
             <label style={s.imgBox}>
-              {form.img
-                ? <img src={form.img} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                : <span style={{ color: "#c0392b", fontWeight: 600 }}>📷 Click to upload image</span>}
+              {form.img ? <img src={form.img} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ color: SCIFI.textMuted, fontSize: 13 }}>📷 Click to upload</span>}
               <input type="file" accept="image/*" style={{ display: "none" }} onChange={handleImg} />
             </label>
           </div>
-
-          {/* Name */}
-          <div style={{ marginBottom: 14 }}>
+          <div style={{ marginBottom: 18 }}>
             <label style={s.label}>Item Name</label>
-            <input
-              style={s.input(errors.name)}
-              placeholder='e.g. "Blue Nike Hoodie" or "Calculus Textbook 3rd Ed."'
-              value={form.name}
-              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-            />
+            <input style={s.inputStyle} placeholder='e.g. "Blue Nike Hoodie"' value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
             {errors.name && <div style={s.err}>{errors.name}</div>}
           </div>
-
-          {/* Price + Category */}
-          <div style={{ ...s.row2, marginBottom: 14 }}>
+          <div style={{ ...s.row3, marginBottom: 18 }}>
             <div>
               <label style={s.label}>Price ($)</label>
-              <input
-                style={s.input(errors.price)}
-                placeholder="e.g. 25"
-                value={form.price}
-                onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
-              />
+              <input style={s.inputStyle} placeholder="25" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} />
               {errors.price && <div style={s.err}>{errors.price}</div>}
             </div>
             <div>
               <label style={s.label}>Category</label>
-              <select style={s.select} value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
-                {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+              <select style={s.inputStyle} value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
+                {CATEGORIES.map(c => <option key={c} value={c}>{CAT_ICONS[c]} {c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={s.label}>Condition</label>
+              <select style={s.inputStyle} value={form.condition} onChange={e => setForm(f => ({ ...f, condition: e.target.value }))}>
+                {CONDITIONS.filter(c => c !== "Any").map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
           </div>
-
-          {/* Description */}
-          <div style={{ marginBottom: 16 }}>
+          <div style={{ marginBottom: 20 }}>
             <label style={s.label}>Description</label>
-            <textarea
-              style={s.textarea}
-              placeholder="Tell buyers about your item! Mention condition, size, color, brand, and any wear or damage."
-              value={form.description}
-              onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-            />
+            <textarea style={{ ...s.inputStyle, minHeight: 100, resize: "vertical" }} placeholder="Condition, size, color, brand..." value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
           </div>
-
-          {/* Delivery */}
-          <div style={{ marginBottom: 8 }}>
-            <label style={s.label}>Delivery Method</label>
+          <div style={{ marginBottom: 24 }}>
+            <label style={s.label}>Delivery</label>
             <div style={s.delivRow}>
               {["pickup", "dropoff"].map(d => (
                 <div key={d} style={s.delivOpt(form.delivery === d)} onClick={() => setForm(f => ({ ...f, delivery: d }))}>
-                  {d === "pickup" ? "📍 Pick Up" : "🚚 Drop Off"}
+                  {d === "pickup" ? "📍 Pickup" : "🚚 Drop Off"}
                 </div>
               ))}
             </div>
           </div>
-
-          <button style={s.submitBtn} onClick={handleUpload}>Post Listing</button>
+          <button style={{ ...s.btnPrimary, width: "100%", padding: "14px 0", fontSize: 15 }} className="btn-glow" onClick={handleUpload}>Post Listing</button>
         </div>
       </div>
     </div>
   );
 
-  // Homepage
+  // ── Homepage ──
   return (
     <div style={s.root}>
-      <nav style={s.nav}>
-        <span style={s.logo}>🐾 PAWSWAP</span>
-        <button style={s.navBtn} onClick={() => setPage("upload")}>+ List Item</button>
-      </nav>
-      <div style={s.wrap}>
-        <div style={s.catRow}>
-          {["All", ...CATEGORIES].map(c => (
-            <button key={c} style={s.catBtn(filterCat === c)} onClick={() => setFilterCat(c)}>
-              {CAT_ICONS[c] || "🔍"} {c}
-            </button>
+      <style>{css}</style>
+      <Nav />
+
+      {/* Hero */}
+      <div style={s.hero}>
+        <div>
+          <div style={s.heroTitle}>The Husky Marketplace</div>
+          <div style={s.heroSub}>BUY · SELL · SWAP · NORTHEASTERN ONLY</div>
+        </div>
+        <div style={{ display: "flex", gap: 12 }}>
+          {[{ n: listings.length, l: "Listings" }, { n: filtered.length, l: "Showing" }, { n: favListings.length, l: "Saved" }].map(({ n, l }) => (
+            <div key={l} style={s.statCard}><div style={s.statNum}>{n}</div><div style={s.statLabel}>{l}</div></div>
           ))}
         </div>
-        {filtered.length === 0
-          ? <div style={{ textAlign: "center", padding: 60, color: "#aaa" }}>No listings yet. Be the first!</div>
-          : <div style={s.grid}>
-              {filtered.map(item => (
-                <div key={item.id} style={s.card}
-                  onMouseEnter={e => e.currentTarget.style.transform = "translateY(-4px)"}
-                  onMouseLeave={e => e.currentTarget.style.transform = "none"}
-                  onClick={() => { setDetail(item); setPage("detail"); }}>
-                  <div style={s.cardImg}>
-                    {item.img ? <img src={item.img} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : CAT_ICONS[item.category]}
-                  </div>
-                  <div style={s.cardBody}>
-                    <div style={{ fontWeight: 700, fontSize: 15 }}>{item.name}</div>
-                    <div style={s.price}>${item.price}</div>
-                    <span style={s.badge("#fdecea")}>{item.category}</span>
-                    <span style={s.badge(item.delivery === "pickup" ? "#e8f8f5" : "#fef9e7")}>
-                      {item.delivery === "pickup" ? "📍 Pickup" : "🚚 Drop Off"}
-                    </span>
-                  </div>
-                </div>
-              ))}
+      </div>
+
+      {/* Search bar */}
+      <div style={s.searchBar}>
+        <div style={s.searchWrap}>
+          <span style={s.searchIcon}>🔍</span>
+          <input
+            style={s.searchInput}
+            placeholder="Search listings, sellers, categories..."
+            value={filters.query}
+            onChange={e => setF("query")(e.target.value)}
+          />
+        </div>
+        <button style={s.filterBtn(activeFilterCount)} onClick={() => setShowFilters(v => !v)}>
+          ⚙ Filters {activeFilterCount > 0 && <div style={s.filterCount}>{activeFilterCount}</div>}
+        </button>
+        <select style={s.sortSelect} value={filters.sort} onChange={e => setF("sort")(e.target.value)}>
+          {SORT_OPTS.map(o => <option key={o}>{o}</option>)}
+        </select>
+        {activeFilterCount > 0 && (
+          <button style={s.clearBtn} onClick={() => setFilters(DEFAULT_FILTERS)}>✕ Clear all</button>
+        )}
+      </div>
+
+      {/* Filter panel */}
+      {showFilters && (
+        <div style={s.filterPanel}>
+          <div style={s.filterGroup}>
+            <div style={s.filterLabel}>Condition</div>
+            <select style={s.filterSelect} value={filters.condition} onChange={e => setF("condition")(e.target.value)}>
+              {CONDITIONS.map(c => <option key={c}>{c}</option>)}
+            </select>
+          </div>
+          <div style={s.filterGroup}>
+            <div style={s.filterLabel}>Delivery</div>
+            <select style={s.filterSelect} value={filters.delivery} onChange={e => setF("delivery")(e.target.value)}>
+              {DELIVERY_OPTS.map(o => <option key={o}>{o}</option>)}
+            </select>
+          </div>
+          <div style={s.filterGroup}>
+            <div style={s.filterLabel}>Price Range</div>
+            <div style={s.priceRow}>
+              <input style={s.priceInput} placeholder="Min" value={filters.minPrice} onChange={e => setF("minPrice")(e.target.value)} />
+              <span style={{ color: SCIFI.textMuted, fontSize: 12 }}>–</span>
+              <input style={s.priceInput} placeholder="Max" value={filters.maxPrice} onChange={e => setF("maxPrice")(e.target.value)} />
             </div>
-        }
+          </div>
+          <div style={s.filterGroup}>
+            <div style={s.filterLabel}>Seller</div>
+            <button style={s.btnGhost(filters.sellerOnly)} onClick={() => setF("sellerOnly")(!filters.sellerOnly)}>
+              {filters.sellerOnly ? "✓ My listings only" : "My listings only"}
+            </button>
+          </div>
+          <button style={s.clearBtn} onClick={() => setFilters(DEFAULT_FILTERS)}>Reset filters</button>
+        </div>
+      )}
+
+      {/* Category tabs */}
+      <div style={s.catTabs}>
+        {["All", ...CATEGORIES].map(c => (
+          <button key={c} style={s.catTab(filters.category === c)} onClick={() => setF("category")(c)}>
+            {CAT_ICONS[c] || "◈"} {c}
+          </button>
+        ))}
+      </div>
+
+      <div style={s.wrap}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+          <div style={s.sectionLabel}>{filtered.length} result{filtered.length !== 1 ? "s" : ""}{filters.query ? ` for "${filters.query}"` : ""}</div>
+          {activeFilterCount > 0 && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {filters.query && <span style={s.badge(SCIFI.surface2, SCIFI.textMuted)}>🔍 {filters.query} <span style={{ cursor: "pointer", marginLeft: 4 }} onClick={() => setF("query")("")}>✕</span></span>}
+              {filters.category !== "All" && <span style={s.badge(SCIFI.accentSoft, "#f87171")}>{filters.category} <span style={{ cursor: "pointer", marginLeft: 4 }} onClick={() => setF("category")("All")}>✕</span></span>}
+              {filters.condition !== "Any" && <span style={s.badge(SCIFI.surface2, SCIFI.textMuted)}>{filters.condition} <span style={{ cursor: "pointer", marginLeft: 4 }} onClick={() => setF("condition")("Any")}>✕</span></span>}
+              {filters.minPrice && <span style={s.badge(SCIFI.surface2, SCIFI.textMuted)}>Min ${filters.minPrice} <span style={{ cursor: "pointer", marginLeft: 4 }} onClick={() => setF("minPrice")("")}>✕</span></span>}
+              {filters.maxPrice && <span style={s.badge(SCIFI.surface2, SCIFI.textMuted)}>Max ${filters.maxPrice} <span style={{ cursor: "pointer", marginLeft: 4 }} onClick={() => setF("maxPrice")("")}>✕</span></span>}
+            </div>
+          )}
+        </div>
+        <CardGrid items={filtered} />
       </div>
     </div>
   );
