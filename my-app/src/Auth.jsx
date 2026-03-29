@@ -1,6 +1,5 @@
 import { useState } from "react";
-
-const API = "http://localhost:8000";
+import { supabase } from "./lib/supabase";
 
 export default function Auth({ onLogin }) {
   const [mode, setMode] = useState("login");
@@ -24,8 +23,48 @@ export default function Auth({ onLogin }) {
 
     setLoading(true);
     try {
-      // TEMP: bypassing backend until CORS is fully fixed
-      onLogin({ email: form.email, name: form.name || form.email.split("@")[0] });
+      if (mode === "login") {
+        const { data, error: loginError } = await supabase.auth.signInWithPassword({
+          email: form.email,
+          password: form.password,
+        });
+        if (loginError) throw loginError;
+
+        const authUser = data?.user;
+        if (!authUser) throw new Error("Could not sign in.");
+        onLogin({
+          id: authUser.id,
+          email: authUser.email,
+          name: authUser.user_metadata?.name || authUser.email?.split("@")[0] || "Husky",
+        });
+      } else {
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email: form.email,
+          password: form.password,
+          options: {
+            data: {
+              name: form.name.trim(),
+              nuid: form.nuid.trim(),
+            },
+          },
+        });
+        if (signUpError) throw signUpError;
+
+        const authUser = data?.user;
+        if (authUser) {
+          await supabase.from("profiles").upsert(
+            {
+              id: authUser.id,
+              nuid: form.nuid.trim(),
+              display_name: form.name.trim(),
+            },
+            { onConflict: "id" }
+          );
+        }
+
+        setMode("login");
+        setError("Account created. Check your email for verification, then sign in.");
+      }
     } catch (err) {
       setError(err.message);
     } finally {
